@@ -12,6 +12,7 @@ export default () => {
   const isDev = process.env.NODE_ENV !== 'production'
 
   return defineConfig({
+    base: isDev ? '/' : '/flag-quiz',
     server: {
       port: 5175
     },
