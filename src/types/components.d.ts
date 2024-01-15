@@ -10,6 +10,7 @@ declare module 'vue' {
     Avatar: typeof import('../components/Layout/UserAvatar.vue')['default']
     BaseUpload: typeof import('./../components/BaseUpload.vue')['default']
     copy: typeof import('../components/Modules/Create/ModulesCreateModalSelect.vue')['default']
+    Flag: typeof import('./../components/Flag.vue')['default']
     ModuleCheckbox: typeof import('./../components/Modules/View/ModuleCheckbox.vue')['default']
     ModuleCover: typeof import('./../components/Modules/View/ModuleCover.vue')['default']
     ModuleDescription: typeof import('./../components/Modules/View/ModuleDescription.vue')['default']
