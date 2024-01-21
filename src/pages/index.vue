@@ -1,110 +1,154 @@
 <template>
   <div class="space-y-6 p-4">
     <h1 class="text-3xl font-bold">Flag Quiz</h1>
-    <Flag :code="flagCode" />
-    <div class="mx-auto max-w-screen-sm">
-      <h2 class="mb-2 text-center text-xl font-semibold">Select the correct country:</h2>
-      <div class="grid grid-cols-2 gap-4">
+
+    <div v-if="ended" class="flex h-full w-full items-center justify-center">
+      <div class="flex flex-col items-center space-y-4">
+        <div>Score: {{ score }}</div>
+        <div class="text-3xl">Game Over</div>
         <button
-          v-for="option in options"
-          :key="option"
-          @click="checkAnswer(option)"
-          :class="{
-            '!bg-green-500': selectedAnswer && correctAnswer === option,
-            '!bg-red-500':
-              selectedAnswer && selectedAnswer !== correctAnswer && selectedAnswer === option
-          }"
-          :disabled="answerDisabled"
+          @click="handleStart"
           class="rounded-md bg-slate-800 p-4 text-white transition-all hover:bg-slate-700"
         >
-          {{ option }}
+          Restart
         </button>
       </div>
-      <div class="mt-4 text-center">
-        <p class="text-lg font-semibold">Streak: {{ streak }}</p>
-        <p v-if="bestStreak" class="text-gray-500">Best Streak: {{ bestStreak }}</p>
+    </div>
+
+    <div v-else-if="!started" class="flex h-full w-full items-center justify-center">
+      <button
+        @click="handleStart"
+        class="rounded-md bg-slate-800 p-4 text-white transition-all hover:bg-slate-700"
+      >
+        Start
+      </button>
+    </div>
+
+    <div v-else class="space-y-8">
+      <div class="text-center text-3xl">{{ timer }}s</div>
+
+      <Flag :code="country.code" :data-name="country.name" :data-code="country.code" />
+      <div class="flex items-center justify-center px-4">
+        <div class="relative flex w-full items-center justify-center md:w-1/3">
+          <input
+            v-model="input"
+            ref="inputRef"
+            class="w-full rounded border border-transparent bg-slate-700 p-2 outline-none transition-all"
+            :class="{ 'border-red-500': error }"
+            @input="handleInput"
+          />
+
+          <Transition name="fade">
+            <div v-if="input" class="absolute inset-x-0 top-[calc(100%+8px)] rounded bg-slate-600">
+              <button
+                v-for="(res, index) in responses"
+                :key="res"
+                class="w-full divide-y px-2 py-1 text-left transition-colors"
+                :class="{ 'bg-purple-500': hovered === index }"
+                @mouseenter="hovered = index"
+                @mouseleave="hovered = -1"
+              >
+                {{ res.item.name }}
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-const flagCode = ref<string>('')
-const codes = ref<Record<string, string>>({})
-const options = reactive<string[]>([])
-const selectedAnswer = ref<string | null>(null)
-const correctAnswer = ref<string | null>(null)
-const answerDisabled = ref<boolean>(false)
-const streak = ref<number>(0)
-let bestStreak = parseInt(localStorage.getItem('bestStreak') || '0')
+const started = ref(false)
 
-onMounted(async () => {
-  try {
-    const response = await fetch('https://flagcdn.com/en/codes.json')
-    const data = await response.json()
-    codes.value = data
-  } catch (error) {
-    console.error('Error fetching data:', error)
-  }
+const configStore = useConfigStore()
 
-  initializeQuiz()
-})
+const { country } = storeToRefs(configStore)
 
-watchEffect(() => {
-  if (selectedAnswer.value) {
-    answerDisabled.value = true
-    setTimeout(() => {
-      initializeQuiz()
-    }, 1000)
-  }
-})
+const input = ref('')
+const hovered = ref(-1)
+const error = ref(false)
+const score = ref(0)
 
-const initializeQuiz = () => {
-  selectedAnswer.value = null
-  correctAnswer.value = null
-  answerDisabled.value = false
-  randomFlag()
-  generateOptions()
+const inputRef = ref<HTMLInputElement>()
+
+const handleStart = () => {
+  timer.value = 30
+  ended.value = false
+  startTimer()
+  started.value = true
+  configStore.nextCountry()
+  nextTick(() => inputRef.value?.focus())
 }
 
-const randomFlag = () => {
-  const keys = Object.keys(codes.value)
-  const randomIndex = Math.floor(Math.random() * keys.length)
-  flagCode.value = keys[randomIndex]
+const responses = ref<any[]>([])
+
+const handleInput = () => {
+  responses.value = fuse.search(input.value).slice(0, 7)
+  hovered.value = 0
 }
 
-const generateOptions = () => {
-  const keys = Object.keys(codes.value)
-  options.length = 0 // Clear the array
-  const correctCountry = codes.value[flagCode.value]
-  correctAnswer.value = correctCountry
-  options.push(correctCountry)
+const handleKey = (e: KeyboardEvent) => {
+  if (!started.value) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleStart()
+    }
+    return
+  }
 
-  while (options.length < 4) {
-    const randomCountry = codes.value[keys[Math.floor(Math.random() * keys.length)]]
-    if (!options.includes(randomCountry)) {
-      options.push(randomCountry)
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+
+    hovered.value = Math.min(hovered.value + 1, responses.value.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+
+    hovered.value = Math.max(hovered.value - 1, 0)
+  } else if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault()
+
+    if (responses.value[hovered.value]) {
+      handleEnter()
+      input.value = ''
+      responses.value = []
+      hovered.value = -1
     }
   }
-
-  options.sort(() => Math.random() - 0.5)
 }
 
-const checkAnswer = (selectedOption: string) => {
-  if (selectedOption === codes.value[flagCode.value]) {
-    // Correct answer
-    console.log('Correct!')
-    streak.value += 1
-    if (streak.value > bestStreak) {
-      bestStreak = streak.value
-      localStorage.setItem('bestStreak', bestStreak.toString())
-    }
+const handleEnter = () => {
+  const { item } = responses.value[hovered.value]
+
+  if (item.code === country.value.code) {
+    score.value += 1
+    configStore.nextCountry()
   } else {
-    // Incorrect answer
-    console.log('Incorrect! Correct answer is:', codes.value[flagCode.value])
-    streak.value = 0
+    error.value = true
   }
+}
 
-  selectedAnswer.value = selectedOption
+onMounted(() => {
+  document.addEventListener('keydown', handleKey)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKey)
+})
+
+// 30sec timer
+const ended = ref(false)
+const timer = ref(30)
+const interval = ref<any>(null)
+
+const startTimer = () => {
+  interval.value = setInterval(() => {
+    timer.value -= 1
+
+    if (timer.value === 0) {
+      clearInterval(interval.value)
+      ended.value = true
+    }
+  }, 1000)
 }
 </script>
